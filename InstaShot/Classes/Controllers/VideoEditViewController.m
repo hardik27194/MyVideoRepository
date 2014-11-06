@@ -10,6 +10,9 @@
 #import "ISCommand.h"
 #import "ISRotateCommand.h"
 
+#define degreesToRadians(x) (M_PI * x / 180.0)
+#define radiansToDegrees(x) (180.0 * x / M_PI)
+
 enum {
     VideoEditTypeOverview = 0,
     VideoEditTypeTrim = 1,
@@ -47,6 +50,7 @@ typedef UInt32 VideoEditType;
     UIButton *shareBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     shareBtn.frame = titleBarBtnFrame;
     [shareBtn setImage:[UIImage imageNamed:@"icon_share"] forState:UIControlStateNormal];
+    [saveBtn addTarget:self action:@selector(saveVideo:) forControlEvents:UIControlEventTouchUpInside];
     
     UIButton *instagramBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     instagramBtn.frame = titleBarBtnFrame;
@@ -223,25 +227,6 @@ typedef UInt32 VideoEditType;
 
 - (void)preview
 {
-    //    //update rotate
-    //    VideoRotateType curRotateType = [[ISVideoManager sharedInstance] videoRotateType];
-    //    switch (curRotateType) {
-    //        case VideoRotateTypeOriginal:
-    //            self.playerLayer.transform = CATransform3DMakeRotation(0.0 / 180.0 * M_PI, 0.0, 0.0, 1.0);
-    //            break;
-    //        case VideoRotateTypeRotate90:
-    //            self.playerLayer.transform = CATransform3DMakeRotation(90.0 / 180.0 * M_PI, 0.0, 0.0, 1.0);
-    //            break;
-    //        case VideoRotateTypeRotate180:
-    //            self.playerLayer.transform = CATransform3DMakeRotation(180.0 / 180.0 * M_PI, 0.0, 0.0, 1.0);
-    //            break;
-    //        case VideoRotateTypeRotate270:
-    //            self.playerLayer.transform = CATransform3DMakeRotation(270.0 / 180.0 * M_PI, 0.0, 0.0, 1.0);
-    //            break;
-    //        default:
-    //            break;
-    //    }
-    
     //update background
     if (self.curEditType == VideoEditTypeOverview) {
         playerView.backgroundColor = [[ISVideoManager sharedInstance] videoBgColor];
@@ -445,31 +430,34 @@ typedef UInt32 VideoEditType;
 
 - (void)rotateAction
 {
+    ISRotateCommand *editCommand = [[ISRotateCommand alloc] initWithComposition:self.composition videoComposition:self.videoComposition audioMix:self.audioMix];
     VideoRotateType curRotateType = [[ISVideoManager sharedInstance] videoRotateType];
     switch (curRotateType) {
         case VideoRotateTypeOriginal:
             [ISVideoManager sharedInstance].previewRotateType = VideoRotateTypeRotate90;
+            [editCommand performWithAsset:movieAsset andRotate:90.0];
             break;
         case VideoRotateTypeRotate90:
             [ISVideoManager sharedInstance].previewRotateType = VideoRotateTypeRotate180;
+            [editCommand performWithAsset:movieAsset andRotate:180.0];
             break;
         case VideoRotateTypeRotate180:
             [ISVideoManager sharedInstance].previewRotateType = VideoRotateTypeRotate270;
+            [editCommand performWithAsset:movieAsset andRotate:-90.0];
             break;
         case VideoRotateTypeRotate270:
             [ISVideoManager sharedInstance].previewRotateType = VideoRotateTypeOriginal;
+            [editCommand performWithAsset:movieAsset andRotate:0.0];
             break;
         default:
             break;
     }
     [[ISVideoManager sharedInstance] savePreviewVideo];
-    [self preview];
 }
 
 - (void)flipAction
 {
-    ISCommand *editCommand = [[ISRotateCommand alloc] initWithComposition:self.composition videoComposition:self.videoComposition audioMix:self.audioMix];
-    [editCommand performWithAsset:movieAsset];
+
 }
 
 #pragma mark--
@@ -621,25 +609,22 @@ typedef UInt32 VideoEditType;
 - (void)editCommandCompletionNotificationReceiver:(NSNotification*) notification
 {
     if ([[notification name] isEqualToString:ISEditCommandCompletionNotification]) {
-        // Update the document's composition, video composition etc
         self.composition = [[notification object] mutableComposition];
         self.videoComposition = [[notification object] mutableVideoComposition];
         self.audioMix = [[notification object] mutableAudioMix];
         dispatch_async( dispatch_get_main_queue(), ^{
-            [self reloadPlayerView];
+            self.videoComposition.animationTool = NULL;
+            AVPlayerItem *playerItem = [AVPlayerItem playerItemWithAsset:self.composition];
+            playerItem.videoComposition = self.videoComposition;
+            playerItem.audioMix = self.audioMix;
+            [[self player] replaceCurrentItemWithPlayerItem:playerItem];
         });
     }
 }
 
-- (void)reloadPlayerView
+- (void)saveVideo:(id)sender
 {
-    // This method is called every time a tool has been applied to a composition
-    // It reloads the player view with the updated composition
-    // Create a new AVPlayerItem and make it our player's current item.
-    self.videoComposition.animationTool = NULL;
-    AVPlayerItem *playerItem = [AVPlayerItem playerItemWithAsset:self.composition];
-    playerItem.videoComposition = self.videoComposition;
-    playerItem.audioMix = self.audioMix;
-    [[self player] replaceCurrentItemWithPlayerItem:playerItem];
+    
 }
+
 @end
